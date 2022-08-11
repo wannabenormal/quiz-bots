@@ -35,7 +35,13 @@ def message_handler(bot, update, questions, db_connection):
         db_connection.set(update.effective_chat.id, question)
         update.message.reply_text(question)
     else:
-        print(db_connection.get(update.effective_chat.id))
+        answer = questions.get(db_connection.get(update.effective_chat.id)).split('.')[0].split('(')[0].strip()
+        user_answer = response.strip()
+
+        if answer == user_answer:
+            update.message.reply_text('Правильно! Для нового вопроса нажми кнопку "Новый вопрос"')
+        else:
+            update.message.reply_text('Неправильно... Попробуешь еще раз?')
 
 
 if __name__ == '__main__':
