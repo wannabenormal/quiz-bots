@@ -1,13 +1,18 @@
 import re
+import os
 
 if __name__ == '__main__':
-    with open('questions/aaron17.txt', 'r', encoding='KOI8-R') as file:
-        file_content = file.read()
-        blocks = file_content.split('\n\n')
-        question_regex = re.compile(r'^(Вопрос [\d]:)')
-        answer_regex = re.compile(r'^(Ответ:)')
+    questions = {}
+    for filename in os.listdir('questions'):
+        if not filename.endswith('.txt'):
+            continue
 
-        questions = {}
+        with open(os.path.join('questions', filename), 'r', encoding='KOI8-R') as file:
+            file_content = file.read()
+
+        blocks = file_content.split('\n\n')
+        question_regex = re.compile(r'^(Вопрос [\d]+:)')
+        answer_regex = re.compile(r'^(Ответ:)')
 
         question = ''
         answer = ''
@@ -21,10 +26,11 @@ if __name__ == '__main__':
 
             if is_answer:
                 answer = answer_regex.split(block.replace('\n', ' '))[2]
+                print(question, answer)
 
             if question and answer:
                 questions[question] = answer
 
                 question = answer = ''
 
-        print(questions)
+    print(questions)
