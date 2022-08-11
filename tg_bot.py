@@ -1,6 +1,11 @@
+from functools import partial
+import random
+
 from environs import Env
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from telegram import ReplyKeyboardMarkup
+
+from parse_questions import parse_questions
 
 
 def start(bot, update):
@@ -21,8 +26,13 @@ def start(bot, update):
     )
 
 
-def echo(bot, update):
-    update.message.reply_text(update.message.text)
+def message_handler(bot, update, questions):
+    response = update.message.text
+
+    if response == 'Новый вопрос':
+        question, _ = random.choice(list(questions.items()))
+
+        update.message.reply_text(question)
 
 
 if __name__ == '__main__':
@@ -33,8 +43,12 @@ if __name__ == '__main__':
     updater = Updater(tg_token)
     dp = updater.dispatcher
 
+    questions = parse_questions()
+
     dp.add_handler(CommandHandler('start', start))
-    dp.add_handler(MessageHandler(Filters.text, echo))
+    dp.add_handler(MessageHandler(
+        Filters.text, partial(message_handler, questions=questions))
+    )
 
     updater.start_polling()
     updater.idle()
