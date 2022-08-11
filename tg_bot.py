@@ -18,7 +18,6 @@ from parse_questions import parse_questions
 
 class QuizSteps(Enum):
     waiting = auto()
-    question = auto()
     answer = auto()
 
 
@@ -67,6 +66,14 @@ def handle_new_question_handler(bot, update, questions, db_connection):
     return QuizSteps.answer
 
 
+def giveup_handler(bot, update, questions, db_connection):
+    question = db_connection.get(update.effective_chat.id)
+    answer = questions.get(question)
+    update.message.reply_text(f'Правильный ответ: {answer}')
+
+    handle_new_question_handler(bot, update, questions, db_connection)
+
+
 if __name__ == '__main__':
     env = Env()
     env.read_env()
@@ -99,6 +106,14 @@ if __name__ == '__main__':
                     questions=questions,
                     db_connection=redis_connection
                 )
+            ),
+            MessageHandler(
+                Filters.regex(r'^(Сдаться)$'),
+                partial(
+                    giveup_handler,
+                    questions=questions,
+                    db_connection=redis_connection
+                )
             )
         ],
         states={
@@ -112,17 +127,15 @@ if __name__ == '__main__':
                     )
                 )
             ],
-            QuizSteps.question: [
+            QuizSteps.answer: [
                 MessageHandler(
-                    Filters.regex(r'^(Новый вопрос)$'),
+                    Filters.regex(r'^(Сдаться)$'),
                     partial(
-                        handle_new_question_handler,
+                        giveup_handler,
                         questions=questions,
                         db_connection=redis_connection
                     )
-                )
-            ],
-            QuizSteps.answer: [
+                ),
                 MessageHandler(
                     Filters.text, partial(
                         handle_solution_attempt,
@@ -130,7 +143,7 @@ if __name__ == '__main__':
                         db_connection=redis_connection
                     )
                 )
-            ]
+            ],
         },
         fallbacks=[]
     )
