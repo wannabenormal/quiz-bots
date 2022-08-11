@@ -1,12 +1,25 @@
+from enum import Enum, auto
 from functools import partial
 import random
 
 import redis
 from environs import Env
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext import (
+    Updater,
+    CommandHandler,
+    MessageHandler,
+    Filters,
+    ConversationHandler
+)
 from telegram import ReplyKeyboardMarkup
 
 from parse_questions import parse_questions
+
+
+class QuizSteps(Enum):
+    waiting = auto()
+    question = auto()
+    answer = auto()
 
 
 def start(bot, update):
@@ -23,25 +36,35 @@ def start(bot, update):
         chat_id=update.effective_chat.id,
         text='Привет! Я бот для викторин!',
         reply_markup=ReplyKeyboardMarkup(keyboard)
-
     )
 
+    return QuizSteps.waiting
 
-def message_handler(bot, update, questions, db_connection):
-    response = update.message.text
 
-    if response == 'Новый вопрос':
-        question, _ = random.choice(list(questions.items()))
-        db_connection.set(update.effective_chat.id, question)
-        update.message.reply_text(question)
+def handle_solution_attempt(bot, update, questions, db_connection):
+    answer = questions.get(
+        db_connection.get(update.effective_chat.id)
+    ).split('.')[0].split('(')[0].strip()
+    user_answer = update.message.text.strip()
+
+    if answer == user_answer:
+        update.message.reply_text(
+            'Правильно! Для нового вопроса нажми кнопку "Новый вопрос"'
+        )
+
+        return QuizSteps.waiting
     else:
-        answer = questions.get(db_connection.get(update.effective_chat.id)).split('.')[0].split('(')[0].strip()
-        user_answer = response.strip()
+        update.message.reply_text('Неправильно... Попробуешь еще раз?')
 
-        if answer == user_answer:
-            update.message.reply_text('Правильно! Для нового вопроса нажми кнопку "Новый вопрос"')
-        else:
-            update.message.reply_text('Неправильно... Попробуешь еще раз?')
+    return QuizSteps.answer
+
+
+def handle_new_question_handler(bot, update, questions, db_connection):
+    question, _ = random.choice(list(questions.items()))
+    db_connection.set(update.effective_chat.id, question)
+    update.message.reply_text(question)
+
+    return QuizSteps.answer
 
 
 if __name__ == '__main__':
@@ -66,14 +89,53 @@ if __name__ == '__main__':
 
     questions = parse_questions()
 
-    dp.add_handler(CommandHandler('start', start))
-    dp.add_handler(MessageHandler(
-        Filters.text, partial(
-            message_handler,
-            questions=questions,
-            db_connection=redis_connection
-        ))
+    conv_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler('start', start),
+            MessageHandler(
+                Filters.regex(r'^(Новый вопрос)$'),
+                partial(
+                    handle_new_question_handler,
+                    questions=questions,
+                    db_connection=redis_connection
+                )
+            )
+        ],
+        states={
+            QuizSteps.waiting: [
+                MessageHandler(
+                    Filters.regex(r'^(Новый вопрос)$'),
+                    partial(
+                        handle_new_question_handler,
+                        questions=questions,
+                        db_connection=redis_connection
+                    )
+                )
+            ],
+            QuizSteps.question: [
+                MessageHandler(
+                    Filters.regex(r'^(Новый вопрос)$'),
+                    partial(
+                        handle_new_question_handler,
+                        questions=questions,
+                        db_connection=redis_connection
+                    )
+                )
+            ],
+            QuizSteps.answer: [
+                MessageHandler(
+                    Filters.text, partial(
+                        handle_solution_attempt,
+                        questions=questions,
+                        db_connection=redis_connection
+                    )
+                )
+            ]
+        },
+        fallbacks=[]
     )
+
+    dp.add_handler(conv_handler)
 
     updater.start_polling()
     updater.idle()
